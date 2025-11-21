@@ -22,7 +22,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: "user",
         targetCalories: 2000,
       });
-      
+
       const breakfastMeal = await storage.createMeal({
         name: "Protein Oatmeal Bowl",
         description: "Steel-cut oats with protein powder, berries, and almonds",
@@ -163,11 +163,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   await ensureDemoUser();
 
+  // Health check endpoint for Docker
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   app.get("/api/schedule/today", async (req, res) => {
     try {
       const today = startOfDay(new Date());
       const schedule = await storage.getActiveScheduleForUser(DEMO_USER_ID);
-      
+
       if (!schedule) {
         return res.json({
           meals: [],
@@ -180,7 +185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const entries = await storage.getScheduleEntries(schedule.id);
       const todayDayOfWeek = today.getDay();
       const todayEntries = entries.filter(e => e.dayOfWeek === todayDayOfWeek);
-      
+
       const mealsWithCompletion = await Promise.all(
         todayEntries.map(async (entry) => {
           const meal = await storage.getMeal(entry.mealId);
@@ -189,7 +194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             entry.mealType,
             today
           );
-          
+
           return {
             mealType: entry.mealType,
             meal: meal!,
@@ -229,7 +234,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const entries = await storage.getScheduleEntries(schedule.id);
       const currentEntry = entries.find(e => e.mealType === mealType);
-      
+
       if (!currentEntry) {
         return res.json([]);
       }
@@ -256,7 +261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/schedule/replace-meal", async (req, res) => {
     try {
       const { mealType, newMealId } = req.body;
-      
+
       const schedule = await storage.getActiveScheduleForUser(DEMO_USER_ID);
       if (!schedule) {
         return res.status(404).json({ error: "No active schedule found" });
@@ -264,7 +269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const entries = await storage.getScheduleEntries(schedule.id);
       const entryToUpdate = entries.find(e => e.mealType === mealType);
-      
+
       if (!entryToUpdate) {
         return res.status(404).json({ error: "Meal entry not found" });
       }
@@ -290,13 +295,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const entries = await storage.getScheduleEntries(schedule.id);
       const todayDayOfWeek = today.getDay();
       const entry = entries.find(e => e.mealType === mealType && e.dayOfWeek === todayDayOfWeek);
-      
+
       if (!entry) {
         return res.status(404).json({ error: "Meal not found in schedule" });
       }
 
       let log = await storage.getComplianceLogByUserAndDate(DEMO_USER_ID, mealType, today);
-      
+
       if (!log) {
         log = await storage.createComplianceLog({
           userId: DEMO_USER_ID,
@@ -345,7 +350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const base64Image = req.file.buffer.toString("base64");
       const analysis = await analyzeGroceryImage(base64Image);
-      
+
       const recipe = await generateRecipe(
         analysis.ingredients,
         analysis.suggestedMealType,
@@ -392,7 +397,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const clients = await storage.getUserClients(specialistId);
-      
+
       let totalCompliance = 0;
       for (const client of clients) {
         const logs = await storage.getComplianceLogs(client.id);
@@ -455,12 +460,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const clients = await storage.getUserClients(specialistId);
-      
+
       const clientsWithCompliance = await Promise.all(
         clients.map(async (client) => {
           const logs = await storage.getComplianceLogs(client.id);
           const completedLogs = logs.filter(l => l.status === "completed");
-          const complianceRate = logs.length > 0 
+          const complianceRate = logs.length > 0
             ? Math.round((completedLogs.length / logs.length) * 100)
             : 0;
 

@@ -24,6 +24,7 @@ A comprehensive nutritional scheduling and meal planning application that helps 
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Running the Project](#running-the-project)
+- [Running with Docker](#running-with-docker)
 - [Project Structure](#project-structure)
 - [Tech Stack](#tech-stack)
 - [Database Setup](#database-setup)
@@ -34,9 +35,15 @@ A comprehensive nutritional scheduling and meal planning application that helps 
 
 Before you begin, ensure you have the following installed:
 
+### Option 1: Local Development
 - **Node.js** (v20.x or higher)
 - **npm** (v9.x or higher)
 - **PostgreSQL** database (or Neon serverless PostgreSQL)
+- **OpenAI API Key** (for AI-powered features)
+
+### Option 2: Docker (Recommended for Quick Start)
+- **Docker** (v20.x or higher)
+- **Docker Compose** (v2.x or higher)
 - **OpenAI API Key** (for AI-powered features)
 
 ## 📦 Installation
@@ -110,6 +117,112 @@ The application will be available at `http://localhost:5000` (or the port specif
 - **Type checking**: `npm run check`
 - **Database push**: `npm run db:push` (push schema changes to database)
 
+## 🐳 Running with Docker
+
+Docker provides an easy way to run the application with all dependencies pre-configured.
+
+### Quick Start with Docker Compose
+
+1. **Navigate to the docker directory**
+   ```bash
+   cd docker
+   ```
+
+2. **Create environment file**
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Edit the `.env` file** and add your OpenAI API key:
+   ```env
+   OPENAI_API_KEY=your_actual_openai_api_key_here
+   SESSION_SECRET=your_random_session_secret_here
+   ```
+
+4. **Start the application**
+   ```bash
+   docker-compose up -d
+   ```
+
+   This will:
+   - Pull the PostgreSQL image
+   - Build the application image
+   - Start both the database and application containers
+   - Create a persistent volume for database data
+
+5. **Initialize the database schema**
+   ```bash
+   docker-compose exec app npm run db:push
+   ```
+
+6. **(Optional) Seed the database** with sample data
+   ```bash
+   docker-compose exec app npx tsx server/seed.ts
+   ```
+
+7. **Access the application**
+   
+   Open your browser and navigate to `http://localhost:5000`
+
+### Docker Management Commands
+
+**View logs**:
+```bash
+# All services
+docker-compose logs -f
+
+# Application only
+docker-compose logs -f app
+
+# Database only
+docker-compose logs -f postgres
+```
+
+**Stop the application**:
+```bash
+docker-compose down
+```
+
+**Stop and remove volumes** (⚠️ this will delete all data):
+```bash
+docker-compose down -v
+```
+
+**Rebuild the application** (after code changes):
+```bash
+docker-compose up -d --build app
+```
+
+**Check service status**:
+```bash
+docker-compose ps
+```
+
+### Docker Environment Variables
+
+The following environment variables can be configured in `docker/.env`:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `POSTGRES_USER` | PostgreSQL username | `nutritrackr` |
+| `POSTGRES_PASSWORD` | PostgreSQL password | `nutritrackr_password` |
+| `POSTGRES_DB` | PostgreSQL database name | `nutritrackr` |
+| `POSTGRES_PORT` | PostgreSQL port (host) | `5432` |
+| `APP_PORT` | Application port (host) | `5000` |
+| `OPENAI_API_KEY` | OpenAI API key | *(required)* |
+| `SESSION_SECRET` | Session encryption secret | *(required)* |
+
+### Docker Architecture
+
+The Docker setup includes:
+- **Multi-stage build**: Optimized image size by separating build and runtime dependencies
+- **PostgreSQL 16**: Dedicated database container with persistent storage
+- **Health checks**: Automatic service health monitoring
+- **Non-root user**: Enhanced security by running as unprivileged user
+- **Alpine Linux**: Minimal base image for smaller footprint
+- **Network isolation**: Services communicate through a dedicated Docker network
+
+
 ## 📁 Project Structure
 
 ```
@@ -132,6 +245,11 @@ Quinoa/
 │   └── index-prod.ts     # Production server entry
 ├── shared/               # Shared code between client and server
 │   └── schema.ts         # Database schema definitions
+├── docker/               # Docker configuration
+│   ├── Dockerfile        # Multi-stage Docker build
+│   ├── docker-compose.yml # Docker Compose orchestration
+│   ├── .dockerignore     # Docker build exclusions
+│   └── .env.example      # Docker environment template
 ├── .replit               # Replit configuration
 ├── components.json       # Shadcn UI configuration
 ├── design_guidelines.md  # Design system documentation

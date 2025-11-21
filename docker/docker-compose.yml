@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: nutritrackr-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nutritrackr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nutritrackr_password}
+      POSTGRES_DB: ${POSTGRES_DB:-nutritrackr}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nutritrackr}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nutritrackr-network
+
+  # Application
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: nutritrackr-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-5000}:5000"
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-nutritrackr}:${POSTGRES_PASSWORD:-nutritrackr_password}@postgres:5432/${POSTGRES_DB:-nutritrackr}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SESSION_SECRET: ${SESSION_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - nutritrackr-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  nutritrackr-network:
+    driver: bridge
