@@ -1,6 +1,6 @@
 # Multi-stage build for optimal image size
 
-# Stage 1: Build the application
+# Stage 1: Build the client application
 FROM node:20-alpine AS builder
 
 # Set working directory
@@ -15,8 +15,8 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build the application
-RUN npm run build
+# Build only the client application
+RUN npm run build:client
 
 # Stage 2: Production image
 FROM node:20-alpine AS production
@@ -30,15 +30,17 @@ RUN apk add --no-cache dumb-init
 # Copy package files
 COPY package*.json ./
 
-# Install only production dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Install all dependencies (we need devDependencies for tsx)
+RUN npm ci && npm cache clean --force
 
-# Copy built application from builder stage
-COPY --from=builder /app/dist ./dist
+# Copy built client from builder stage
+COPY --from=builder /app/dist/public ./dist/public
 
-# Copy necessary runtime files
-COPY --from=builder /app/drizzle.config.ts ./
-COPY --from=builder /app/shared ./shared
+# Copy server source files
+COPY server ./server
+COPY shared ./shared
+COPY drizzle.config.ts ./
+COPY tsconfig.json ./
 
 # Create a non-root user
 RUN addgroup -g 1001 -S nodejs && \
@@ -59,5 +61,5 @@ ENV NODE_ENV=production
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the application
-CMD ["node", "dist/index.js"]
+# Start the application using tsx
+CMD ["npx", "tsx", "server/index-prod.ts"]
