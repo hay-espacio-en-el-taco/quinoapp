@@ -9,11 +9,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quinoa_password}
       POSTGRES_DB: ${POSTGRES_DB:-quinoa}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5431}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quinoa}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quinoa}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,15 +41,11 @@ services:
     networks:
       - quinoa-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/api/health"]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/api/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-
-volumes:
-  postgres_data:
-    driver: local
 
 networks:
   quinoa-network:
