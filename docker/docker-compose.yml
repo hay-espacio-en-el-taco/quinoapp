@@ -4,6 +4,8 @@ services:
     image: postgres:16-alpine
     container_name: quinoa-db
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-quinoa}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quinoa_password}
@@ -27,6 +29,8 @@ services:
       dockerfile: docker/Dockerfile
     container_name: quinoa-app
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "${APP_PORT:-5000}:5000"
     environment:
