@@ -1,27 +1,4 @@
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:16-alpine
-    container_name: quinoa-db
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-quinoa}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quinoa_password}
-      POSTGRES_DB: ${POSTGRES_DB:-quinoa}
-    ports:
-      - "${POSTGRES_PORT:-5431}:5432"
-    volumes:
-      - ./data/postgres:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quinoa}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - quinoa-network
-
   # Application
   app:
     build:
@@ -36,12 +13,12 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-quinoa}:${POSTGRES_PASSWORD:-quinoa_password}@postgres:5432/${POSTGRES_DB:-quinoa}
+      DATABASE_URL: ${DATABASE_URL}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       SESSION_SECRET: ${SESSION_SECRET}
-    depends_on:
-      postgres:
-        condition: service_healthy
     networks:
       - quinoa-network
     healthcheck:
