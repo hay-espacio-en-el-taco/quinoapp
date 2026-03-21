@@ -7,12 +7,15 @@ import { z } from "zod";
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  password: text("password"),
   email: text("email").notNull().unique(),
   fullName: text("full_name").notNull(),
   role: text("role").notNull().default("user"),
   specialistId: varchar("specialist_id"),
   targetCalories: integer("target_calories").default(2000),
+  phoneNumber: text("phone_number"),
+  authProvider: text("auth_provider").default("local"),
+  authProviderId: text("auth_provider_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -178,3 +181,7 @@ export type ScheduleEntry = typeof scheduleEntries.$inferSelect;
 
 export type InsertComplianceLog = z.infer<typeof insertComplianceLogSchema>;
 export type ComplianceLog = typeof complianceLogs.$inferSelect;
+
+export const phoneNumberSchema = z.object({
+  phoneNumber: z.string().regex(/^\+\d{10,15}$/, "Phone number must be in international format (e.g. +5215512345678)"),
+});

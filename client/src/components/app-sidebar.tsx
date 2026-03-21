@@ -1,4 +1,4 @@
-import { Home, Utensils, Camera, BookOpen, Users, BarChart3, User } from "lucide-react";
+import { Home, Utensils, Camera, BookOpen, Users, BarChart3, User, LogOut } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/sidebar";
 import { useLocation } from "wouter";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
 
 const userItems = [
   {
@@ -62,6 +64,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ userRole = "user", userName = "User" }: AppSidebarProps) {
   const [location] = useLocation();
+  const { logout } = useAuth();
   const items = userRole === "specialist" ? specialistItems : userItems;
 
   return (
@@ -107,6 +110,15 @@ export function AppSidebar({ userRole = "user", userName = "User" }: AppSidebarP
             <span className="text-sm font-medium truncate">{userName}</span>
             <span className="text-xs text-muted-foreground capitalize">{userRole}</span>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => logout()}
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            title="Sign out"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </SidebarFooter>
     </Sidebar>

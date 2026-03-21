@@ -27,7 +27,9 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getUserClients(specialistId: string): Promise<User[]>;
-  
+  getUserByProviderId(provider: string, providerId: string): Promise<User | undefined>;
+  updateUserPhone(userId: string, phoneNumber: string): Promise<User | undefined>;
+
   getMeal(id: string): Promise<Meal | undefined>;
   getMealsByType(mealType: string): Promise<Meal[]>;
   getMealsByCalorieRange(minCal: number, maxCal: number, mealType?: string): Promise<Meal[]>;
@@ -74,6 +76,25 @@ export class DatabaseStorage implements IStorage {
 
   async getUserClients(specialistId: string): Promise<User[]> {
     return db.select().from(users).where(eq(users.specialistId, specialistId));
+  }
+
+  async getUserByProviderId(provider: string, providerId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.authProvider, provider),
+        eq(users.authProviderId, providerId)
+      )
+    );
+    return user || undefined;
+  }
+
+  async updateUserPhone(userId: string, phoneNumber: string): Promise<User | undefined> {
+    const [updated] = await db
+      .update(users)
+      .set({ phoneNumber })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated || undefined;
   }
 
   async getMeal(id: string): Promise<Meal | undefined> {
