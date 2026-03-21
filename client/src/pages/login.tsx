@@ -1,8 +1,91 @@
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useLocation } from "wouter";
+
+const loginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+const registerSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  email: z.string().email("Invalid email address"),
+  fullName: z.string().min(1, "Full name is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+type LoginValues = z.infer<typeof loginSchema>;
+type RegisterValues = z.infer<typeof registerSchema>;
 
 export default function LoginPage() {
+  const [, setLocation] = useLocation();
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const loginForm = useForm<LoginValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { username: "", password: "" },
+  });
+
+  const registerForm = useForm<RegisterValues>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: { username: "", email: "", fullName: "", password: "", confirmPassword: "" },
+  });
+
+  async function onLogin(values: LoginValues) {
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const res = await apiRequest("POST", "/api/auth/login", values);
+      const user = await res.json();
+      queryClient.setQueryData(["/api/auth/user"], user);
+      if (!user.phoneNumber) {
+        setLocation("/collect-phone");
+      } else {
+        setLocation("/");
+      }
+    } catch (err: any) {
+      setError(err.message?.includes("401") ? "Invalid username or password" : "Login failed. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function onRegister(values: RegisterValues) {
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const { confirmPassword, ...data } = values;
+      const res = await apiRequest("POST", "/api/auth/register", data);
+      const user = await res.json();
+      queryClient.setQueryData(["/api/auth/user"], user);
+      setLocation("/collect-phone");
+    } catch (err: any) {
+      const msg = err.message || "";
+      if (msg.includes("Username already")) {
+        setError("Username already taken");
+      } else if (msg.includes("Email already")) {
+        setError("Email already registered");
+      } else {
+        setError("Registration failed. Please try again.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 dark:from-gray-900 dark:to-gray-800 p-4">
       <Card className="w-full max-w-md">
@@ -26,62 +109,141 @@ export default function LoginPage() {
           </div>
           <CardTitle className="text-2xl font-bold">NutriPlan</CardTitle>
           <CardDescription className="text-base">
-            Sign in to your nutrition companion
+            Your nutrition companion
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <Button
-            variant="outline"
-            className="w-full h-12 text-base font-medium gap-3"
-            onClick={() => {
-              window.location.href = "/api/auth/google";
-            }}
-          >
-            <svg viewBox="0 0 24 24" className="w-5 h-5">
-              <path
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-                fill="#4285F4"
-              />
-              <path
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                fill="#34A853"
-              />
-              <path
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                fill="#FBBC05"
-              />
-              <path
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                fill="#EA4335"
-              />
-            </svg>
-            Continue with Google
-          </Button>
+        <CardContent>
+          <Tabs defaultValue="login" onValueChange={() => setError(null)}>
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger value="login">Sign In</TabsTrigger>
+              <TabsTrigger value="register">Sign Up</TabsTrigger>
+            </TabsList>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <Separator className="w-full" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">or</span>
-            </div>
-          </div>
+            {error && (
+              <div className="mb-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm text-center">
+                {error}
+              </div>
+            )}
 
-          <Button
-            className="w-full h-12 text-base font-medium gap-3 bg-[#1877F2] hover:bg-[#166FE5] text-white"
-            onClick={() => {
-              window.location.href = "/api/auth/facebook";
-            }}
-          >
-            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
-              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-            </svg>
-            Continue with Facebook
-          </Button>
+            <TabsContent value="login">
+              <Form {...loginForm}>
+                <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-4">
+                  <FormField
+                    control={loginForm.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Username</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter your username" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={loginForm.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password</FormLabel>
+                        <FormControl>
+                          <Input type="password" placeholder="Enter your password" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button
+                    type="submit"
+                    className="w-full h-11 text-base font-medium bg-green-600 hover:bg-green-700"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Signing in..." : "Sign In"}
+                  </Button>
+                </form>
+              </Form>
+            </TabsContent>
 
-          <p className="text-xs text-center text-muted-foreground pt-4">
-            By signing in, you agree to our Terms of Service and Privacy Policy
-          </p>
+            <TabsContent value="register">
+              <Form {...registerForm}>
+                <form onSubmit={registerForm.handleSubmit(onRegister)} className="space-y-4">
+                  <FormField
+                    control={registerForm.control}
+                    name="fullName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Full Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="John Doe" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={registerForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="john@example.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={registerForm.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Username</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Choose a username" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={registerForm.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password</FormLabel>
+                        <FormControl>
+                          <Input type="password" placeholder="At least 6 characters" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={registerForm.control}
+                    name="confirmPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Confirm Password</FormLabel>
+                        <FormControl>
+                          <Input type="password" placeholder="Confirm your password" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button
+                    type="submit"
+                    className="w-full h-11 text-base font-medium bg-green-600 hover:bg-green-700"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Creating account..." : "Create Account"}
+                  </Button>
+                </form>
+              </Form>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>

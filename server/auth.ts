@@ -1,13 +1,13 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import passport from "passport";
-import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { Strategy as FacebookStrategy } from "passport-facebook";
+import { Strategy as LocalStrategy } from "passport-local";
 import connectPgSimple from "connect-pg-simple";
+import crypto from "crypto";
 import { pool } from "./db";
 import { storage } from "./storage";
-import type { User } from "@shared/schema";
 import { phoneNumberSchema } from "@shared/schema";
+import { z } from "zod";
 
 declare global {
   namespace Express {
@@ -28,12 +28,38 @@ declare global {
   }
 }
 
+function hashPassword(password: string, salt: string): string {
+  return crypto.scryptSync(password, salt, 64).toString("hex");
+}
+
+function generateSalt(): string {
+  return crypto.randomBytes(16).toString("hex");
+}
+
+function verifyPassword(password: string, stored: string): boolean {
+  const [salt, hash] = stored.split(":");
+  if (!salt || !hash) return false;
+  return hashPassword(password, salt) === hash;
+}
+
+function createHashedPassword(password: string): string {
+  const salt = generateSalt();
+  return `${salt}:${hashPassword(password, salt)}`;
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) {
     return next();
   }
   res.status(401).json({ message: "Not authenticated" });
 }
+
+const registerSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  fullName: z.string().min(1, "Full name is required"),
+});
 
 export function setupAuth(app: Express) {
   const PgStore = connectPgSimple(session);
@@ -70,129 +96,91 @@ export function setupAuth(app: Express) {
     }
   });
 
-  const appUrl = process.env.APP_URL || "http://localhost:5000";
-
-  // Google OAuth Strategy
-  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    passport.use(
-      new GoogleStrategy(
-        {
-          clientID: process.env.GOOGLE_CLIENT_ID,
-          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-          callbackURL: `${appUrl}/api/auth/google/callback`,
-          scope: ["profile", "email"],
-        },
-        async (_accessToken, _refreshToken, profile, done) => {
-          try {
-            let user = await storage.getUserByProviderId("google", profile.id);
-            if (!user) {
-              const email = profile.emails?.[0]?.value;
-              if (!email) {
-                return done(new Error("No email provided by Google"));
-              }
-              // Check if user with this email already exists
-              user = await storage.getUserByEmail(email);
-              if (!user) {
-                user = await storage.createUser({
-                  username: email.split("@")[0] + "_google",
-                  email,
-                  fullName: profile.displayName || email.split("@")[0],
-                  authProvider: "google",
-                  authProviderId: profile.id,
-                  role: "user",
-                });
-              }
-            }
-            done(null, user);
-          } catch (err) {
-            done(err as Error);
-          }
+  passport.use(
+    new LocalStrategy(async (username, password, done) => {
+      try {
+        const user = await storage.getUserByUsername(username);
+        if (!user || !user.password) {
+          return done(null, false, { message: "Invalid username or password" });
         }
-      )
-    );
-  }
-
-  // Facebook OAuth Strategy
-  if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
-    passport.use(
-      new FacebookStrategy(
-        {
-          clientID: process.env.FACEBOOK_APP_ID,
-          clientSecret: process.env.FACEBOOK_APP_SECRET,
-          callbackURL: `${appUrl}/api/auth/facebook/callback`,
-          profileFields: ["id", "emails", "name", "displayName"],
-        },
-        async (_accessToken, _refreshToken, profile, done) => {
-          try {
-            let user = await storage.getUserByProviderId("facebook", profile.id);
-            if (!user) {
-              const email = profile.emails?.[0]?.value;
-              if (!email) {
-                return done(new Error("No email provided by Facebook. Please ensure your Facebook account has a verified email."));
-              }
-              user = await storage.getUserByEmail(email);
-              if (!user) {
-                const displayName = profile.displayName ||
-                  [profile.name?.givenName, profile.name?.familyName].filter(Boolean).join(" ") ||
-                  email.split("@")[0];
-                user = await storage.createUser({
-                  username: email.split("@")[0] + "_facebook",
-                  email,
-                  fullName: displayName,
-                  authProvider: "facebook",
-                  authProviderId: profile.id,
-                  role: "user",
-                });
-              }
-            }
-            done(null, user);
-          } catch (err) {
-            done(err as Error);
-          }
+        if (!verifyPassword(password, user.password)) {
+          return done(null, false, { message: "Invalid username or password" });
         }
-      )
-    );
-  }
-
-  // Auth routes
-  app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
-
-  app.get(
-    "/api/auth/google/callback",
-    passport.authenticate("google", { failureRedirect: "/login" }),
-    (req, res) => {
-      const user = req.user as Express.User;
-      if (!user.phoneNumber) {
-        return res.redirect("/collect-phone");
+        done(null, user);
+      } catch (err) {
+        done(err);
       }
-      res.redirect("/");
-    }
+    })
   );
 
-  app.get("/api/auth/facebook", passport.authenticate("facebook", { scope: ["email"] }));
-
-  app.get(
-    "/api/auth/facebook/callback",
-    passport.authenticate("facebook", { failureRedirect: "/login" }),
-    (req, res) => {
-      const user = req.user as Express.User;
-      if (!user.phoneNumber) {
-        return res.redirect("/collect-phone");
+  // Login
+  app.post("/api/auth/login", (req, res, next) => {
+    passport.authenticate("local", (err: Error | null, user: Express.User | false, info: { message: string }) => {
+      if (err) return next(err);
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "Invalid credentials" });
       }
-      res.redirect("/");
-    }
-  );
+      req.logIn(user, (err) => {
+        if (err) return next(err);
+        const { password, ...safeUser } = user;
+        res.json(safeUser);
+      });
+    })(req, res, next);
+  });
 
+  // Register
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const result = registerSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ message: result.error.errors[0].message });
+      }
+
+      const { username, email, password, fullName } = result.data;
+
+      const existingUsername = await storage.getUserByUsername(username);
+      if (existingUsername) {
+        return res.status(400).json({ message: "Username already taken" });
+      }
+
+      const existingEmail = await storage.getUserByEmail(email);
+      if (existingEmail) {
+        return res.status(400).json({ message: "Email already registered" });
+      }
+
+      const user = await storage.createUser({
+        username,
+        email,
+        password: createHashedPassword(password),
+        fullName,
+        role: "user",
+        authProvider: "local",
+      });
+
+      req.logIn(user, (err) => {
+        if (err) {
+          return res.status(500).json({ message: "Registration succeeded but login failed" });
+        }
+        const { password: _, ...safeUser } = user;
+        res.status(201).json(safeUser);
+      });
+    } catch (error) {
+      console.error("Error registering user:", error);
+      res.status(500).json({ message: "Failed to register" });
+    }
+  });
+
+  // Get current user
   app.get("/api/auth/user", (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Not authenticated" });
     }
     const user = req.user as Express.User;
-    // Don't send password to client
     const { password, ...safeUser } = user;
     res.json(safeUser);
   });
 
+  // Update phone number
   app.post("/api/auth/phone", requireAuth, async (req, res) => {
     try {
       const result = phoneNumberSchema.safeParse(req.body);
@@ -212,6 +200,7 @@ export function setupAuth(app: Express) {
     }
   });
 
+  // Logout
   app.post("/api/auth/logout", (req, res) => {
     req.logout((err) => {
       if (err) {
