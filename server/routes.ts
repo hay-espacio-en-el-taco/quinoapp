@@ -5,173 +5,28 @@ import multer from "multer";
 import { analyzeGroceryImage, generateRecipe } from "./openai";
 import { z } from "zod";
 import { startOfDay, addDays } from "date-fns";
+import { requireAuth } from "./auth";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  let DEMO_USER_ID = "demo-user-001";
-
-  async function ensureDemoUser() {
-    let user = await storage.getUserByEmail("user@nutriplan.com");
-    if (!user) {
-      user = await storage.createUser({
-        username: "demo_user",
-        password: "hashed_password",
-        email: "user@nutriplan.com",
-        fullName: "Demo User",
-        role: "user",
-        targetCalories: 2000,
-      });
-
-      const breakfastMeal = await storage.createMeal({
-        name: "Protein Oatmeal Bowl",
-        description: "Steel-cut oats with protein powder, berries, and almonds",
-        mealType: "breakfast",
-        calories: 420,
-        protein: "25",
-        carbs: "52",
-        fats: "12",
-        servingSize: "1 bowl",
-      });
-
-      const lunchMeal = await storage.createMeal({
-        name: "Grilled Chicken Salad",
-        description: "Mixed greens with grilled chicken, vegetables, and balsamic vinaigrette",
-        mealType: "lunch",
-        calories: 480,
-        protein: "38",
-        carbs: "32",
-        fats: "18",
-        servingSize: "1 large salad",
-      });
-
-      const dinnerMeal = await storage.createMeal({
-        name: "Baked Salmon & Vegetables",
-        description: "Oven-baked salmon with asparagus and sweet potato",
-        mealType: "dinner",
-        calories: 580,
-        protein: "42",
-        carbs: "48",
-        fats: "22",
-        servingSize: "1 plate",
-      });
-
-      const snackMeal = await storage.createMeal({
-        name: "Protein Smoothie",
-        description: "Banana, protein powder, almond milk, and spinach",
-        mealType: "snack",
-        calories: 220,
-        protein: "20",
-        carbs: "28",
-        fats: "4",
-        servingSize: "12 oz",
-      });
-
-      const schedule = await storage.createSchedule({
-        userId: user.id,
-        name: "Weekly Meal Plan",
-        startDate: startOfDay(new Date()),
-        isActive: true,
-      });
-
-      await storage.createMeal({
-        name: "Greek Yogurt Parfait",
-        description: "Greek yogurt layered with granola and fresh fruit",
-        mealType: "breakfast",
-        calories: 380,
-        protein: "22",
-        carbs: "48",
-        fats: "10",
-        servingSize: "1 parfait",
-      });
-
-      await storage.createMeal({
-        name: "Turkey & Avocado Wrap",
-        description: "Whole wheat wrap with turkey, avocado, lettuce, and tomato",
-        mealType: "lunch",
-        calories: 520,
-        protein: "32",
-        carbs: "45",
-        fats: "20",
-        servingSize: "1 wrap",
-      });
-
-      await storage.createMeal({
-        name: "Grilled Chicken & Broccoli",
-        description: "Herb-marinated chicken breast with steamed broccoli and quinoa",
-        mealType: "dinner",
-        calories: 550,
-        protein: "48",
-        carbs: "42",
-        fats: "16",
-        servingSize: "1 plate",
-      });
-
-      await storage.createMeal({
-        name: "Apple & Almond Butter",
-        description: "Sliced apple with natural almond butter",
-        mealType: "snack",
-        calories: 180,
-        protein: "6",
-        carbs: "24",
-        fats: "8",
-        servingSize: "1 apple + 2 tbsp",
-      });
-
-      await storage.createRecipe({
-        name: "Mediterranean Chicken Bowl",
-        description: "A healthy Mediterranean-inspired bowl with grilled chicken",
-        ingredients: ["2 chicken breasts", "1 cup quinoa", "1 cucumber", "1 cup cherry tomatoes", "1/4 cup feta cheese", "2 tbsp olive oil", "Lemon juice", "Fresh herbs"],
-        instructions: ["Cook quinoa according to package", "Grill seasoned chicken breasts", "Dice cucumber and tomatoes", "Combine all ingredients in bowl", "Drizzle with olive oil and lemon", "Top with feta and herbs"],
-        calories: 520,
-        protein: "42",
-        carbs: "48",
-        fats: "16",
-        servingSize: "1 large bowl",
-        mealType: "lunch",
-      });
-
-      const today = new Date().getDay();
-      await storage.createScheduleEntry({
-        scheduleId: schedule.id,
-        mealId: breakfastMeal.id,
-        mealType: "breakfast",
-        dayOfWeek: today,
-      });
-      await storage.createScheduleEntry({
-        scheduleId: schedule.id,
-        mealId: lunchMeal.id,
-        mealType: "lunch",
-        dayOfWeek: today,
-      });
-      await storage.createScheduleEntry({
-        scheduleId: schedule.id,
-        mealId: dinnerMeal.id,
-        mealType: "dinner",
-        dayOfWeek: today,
-      });
-      await storage.createScheduleEntry({
-        scheduleId: schedule.id,
-        mealId: snackMeal.id,
-        mealType: "snack",
-        dayOfWeek: today,
-      });
-    }
-    DEMO_USER_ID = user.id;
-    return user;
-  }
-
-  await ensureDemoUser();
-
-  // Health check endpoint for Docker
+  // Health check endpoint for Docker (no auth required)
   app.get("/api/health", (_req, res) => {
     res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Protect all /api routes except /api/auth/* and /api/health
+  app.use("/api", (req, res, next) => {
+    if (req.path.startsWith("/auth") || req.path === "/health") {
+      return next();
+    }
+    requireAuth(req, res, next);
   });
 
   app.get("/api/schedule/today", async (req, res) => {
     try {
       const today = startOfDay(new Date());
-      const schedule = await storage.getActiveScheduleForUser(DEMO_USER_ID);
+      const schedule = await storage.getActiveScheduleForUser(req.user!.id);
 
       if (!schedule) {
         return res.json({
@@ -190,7 +45,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         todayEntries.map(async (entry) => {
           const meal = await storage.getMeal(entry.mealId);
           const complianceLog = await storage.getComplianceLogByUserAndDate(
-            DEMO_USER_ID,
+            req.user!.id,
             entry.mealType,
             today
           );
@@ -227,7 +82,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "mealType is required" });
       }
 
-      const schedule = await storage.getActiveScheduleForUser(DEMO_USER_ID);
+      const schedule = await storage.getActiveScheduleForUser(req.user!.id);
       if (!schedule) {
         return res.json([]);
       }
@@ -262,7 +117,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { mealType, newMealId } = req.body;
 
-      const schedule = await storage.getActiveScheduleForUser(DEMO_USER_ID);
+      const schedule = await storage.getActiveScheduleForUser(req.user!.id);
       if (!schedule) {
         return res.status(404).json({ error: "No active schedule found" });
       }
@@ -287,7 +142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { mealType } = req.body;
       const today = startOfDay(new Date());
 
-      const schedule = await storage.getActiveScheduleForUser(DEMO_USER_ID);
+      const schedule = await storage.getActiveScheduleForUser(req.user!.id);
       if (!schedule) {
         return res.status(404).json({ error: "No active schedule found" });
       }
@@ -300,11 +155,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Meal not found in schedule" });
       }
 
-      let log = await storage.getComplianceLogByUserAndDate(DEMO_USER_ID, mealType, today);
+      let log = await storage.getComplianceLogByUserAndDate(req.user!.id, mealType, today);
 
       if (!log) {
         log = await storage.createComplianceLog({
-          userId: DEMO_USER_ID,
+          userId: req.user!.id,
           mealId: entry.mealId,
           mealType,
           scheduledDate: today,
@@ -324,7 +179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/compliance/history", async (req, res) => {
     try {
-      const logs = await storage.getComplianceLogs(DEMO_USER_ID);
+      const logs = await storage.getComplianceLogs(req.user!.id);
       res.json(logs);
     } catch (error) {
       console.error("Error fetching compliance history:", error);
@@ -368,7 +223,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fats: recipe.fats.toString(),
         servingSize: recipe.servingSize,
         mealType: analysis.suggestedMealType,
-        createdBy: DEMO_USER_ID,
+        createdBy: req.user!.id,
       });
 
       res.json({ recipe: savedRecipe });
