@@ -2,7 +2,7 @@
 
 A comprehensive nutritional scheduling and meal planning application that helps users manage their daily nutrition through personalized meal plans, AI-powered recipe generation from grocery images, and specialist tracking capabilities.
 
-**Live Demo**: [https://exquisite-youtiao-50503e.netlify.app](https://exquisite-youtiao-50503e.netlify.app)
+**Live Demo**: [https://quinoadev.netlify.app](https://quinoadev.netlify.app)
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6.3-blue)
