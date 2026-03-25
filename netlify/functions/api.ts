@@ -9,7 +9,7 @@ async function initializeApp(): Promise<void> {
   if (initialized) return;
 
   setupAuth(app);
-  await registerRoutes(app);
+  await registerRoutes(app, true);
 
   // Replicate the error handler from runApp() in server/app.ts,
   // without calling server.listen() which is meaningless in serverless
