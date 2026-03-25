@@ -1,5 +1,6 @@
 import serverless from "serverless-http";
 import { app } from "../../server/app";
+import { setupAuth } from "../../server/auth";
 import { registerRoutes } from "../../server/routes";
 
 let initialized = false;
@@ -7,6 +8,7 @@ let initialized = false;
 async function initializeApp(): Promise<void> {
   if (initialized) return;
 
+  setupAuth(app);
   await registerRoutes(app);
 
   // Replicate the error handler from runApp() in server/app.ts,
