@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { users, meals, schedules, scheduleEntries, complianceLogs, recipes } from "@shared/schema";
+import { users, meals, schedules, scheduleEntries, complianceLogs, recipes } from "../shared/schema";
 import { startOfWeek } from "date-fns";
 
 async function seed() {

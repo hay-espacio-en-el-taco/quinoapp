@@ -9,7 +9,9 @@ import { requireAuth } from "./auth";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express): Promise<Server>;
+export async function registerRoutes(app: Express, skipServer?: boolean): Promise<Server | void>;
+export async function registerRoutes(app: Express, skipServer?: boolean): Promise<Server | void> {
   // Health check endpoint for Docker (no auth required)
   app.get("/api/health", (_req, res) => {
     res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
@@ -339,6 +341,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  if (skipServer) return;
   const httpServer = createServer(app);
   return httpServer;
 }
