@@ -17,7 +17,7 @@ import {
   type InsertScheduleEntry,
   type ComplianceLog,
   type InsertComplianceLog,
-} from "@shared/schema";
+} from "../shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 

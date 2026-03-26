@@ -6,7 +6,7 @@ import connectPgSimple from "connect-pg-simple";
 import crypto from "crypto";
 import { pool } from "./db";
 import { storage } from "./storage";
-import { phoneNumberSchema } from "@shared/schema";
+import { phoneNumberSchema } from "../shared/schema";
 import { z } from "zod";
 
 declare global {
@@ -64,6 +64,10 @@ const registerSchema = z.object({
 export function setupAuth(app: Express) {
   const PgStore = connectPgSimple(session);
 
+  const isProduction = process.env.NODE_ENV === "production";
+
+  app.set("trust proxy", 1);
+
   app.use(
     session({
       store: new PgStore({
@@ -74,7 +78,8 @@ export function setupAuth(app: Express) {
       resave: false,
       saveUninitialized: false,
       cookie: {
-        secure: false,
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax",
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       },
     })
