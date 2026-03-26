@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import multer from "multer";
 import { analyzeGroceryImage, generateRecipe } from "./openai";
 import { z } from "zod";
-import { startOfDay, addDays } from "date-fns";
+import { startOfDay } from "date-fns";
 import { requireAuth } from "./auth";
 
 const upload = multer({ storage: multer.memoryStorage() });
